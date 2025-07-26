@@ -1,0 +1,6 @@
+google-adk
+litellm
+fastapi
+uvicorn[standard]
+pydantic
+requests
