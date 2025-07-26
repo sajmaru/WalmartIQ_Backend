@@ -1,0 +1,84 @@
+{
+  "directed": true,
+  "multigraph": false,
+  "graph": {},
+  "nodes": [
+    {
+      "id": "202201",
+      "label": "202201",
+      "color": "#FFD700",
+      "node_type": "month"
+    },
+    {
+      "id": "20220101",
+      "label": "20220101",
+      "color": "#FF8C00",
+      "node_type": "day"
+    },
+    {
+      "id": "20220101-EL-Total-Total",
+      "label": "20220101-EL-Total-Total",
+      "color": "#FF6F61",
+      "node_type": "sbu",
+      "daily_sbu_GMV_AMT": 1500000.0,
+      "dept_count": 5
+    },
+    {
+      "id": "20220101-EL-Smartphones-Total",
+      "label": "20220101-EL-Smartphones-Total",
+      "color": "#F7CAC9",
+      "node_type": "dept",
+      "daily_dept_GMV_AMT": 800000.0,
+      "dept_id": "EL_SM",
+      "dept_name": "Smartphones"
+    },
+    {
+      "id": "20220101-EL-Smartphones-1001",
+      "label": "20220101-EL-Smartphones-1001",
+      "color": "#88B04B",
+      "node_type": "store",
+      "total_sales_unit": 150.0,
+      "total_gmv_amt": 45000.0,
+      "LAT_DGR": 25.7617,
+      "LONG_DGR": -80.1918
+    },
+    {
+      "id": "20220101-1001-Weather",
+      "label": "20220101-1001-Weather",
+      "color": "#00A8E8",
+      "node_type": "weather",
+      "AVG_AIR_TEMPR_DGR": 75.2,
+      "AVG_POS_DLY_SNOWFALL_QTY": 0.0,
+      "AVG_POS_PRECIP_QTY": 0.1,
+      "LAT_DGR": 25.7617,
+      "LONG_DGR": -80.1918
+    }
+  ],
+  "links": [
+    {
+      "source": "202201",
+      "target": "20220101",
+      "label": "has day"
+    },
+    {
+      "source": "20220101",
+      "target": "20220101-EL-Total-Total",
+      "label": "has sbu"
+    },
+    {
+      "source": "20220101-EL-Total-Total",
+      "target": "20220101-EL-Smartphones-Total",
+      "label": "has department"
+    },
+    {
+      "source": "20220101-EL-Smartphones-Total",
+      "target": "20220101-EL-Smartphones-1001",
+      "label": "has store"
+    },
+    {
+      "source": "20220101-EL-Smartphones-1001",
+      "target": "20220101-1001-Weather",
+      "label": "has weather"
+    }
+  ]
+}

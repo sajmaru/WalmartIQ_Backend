@@ -1,6 +1,24 @@
+# Enhanced requirements.txt for KG Query System
+
+# Core dependencies
 google-adk
 litellm
 fastapi
 uvicorn[standard]
 pydantic
 requests
+
+# Data processing and KG libraries
+networkx>=3.0
+pandas>=1.5.0
+numpy>=1.24.0
+
+# Optional: For enhanced security (Docker execution)
+# docker (system dependency)
+
+# Development and testing
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+
+# Optional: Enhanced sandbox execution
+# e2b-code-interpreter  # Uncomment if using E2B cloud sandboxes
