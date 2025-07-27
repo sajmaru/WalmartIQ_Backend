@@ -12,7 +12,7 @@ results = {
 }
 
 try:
-    # Step 1: Load KG files
+    # ---- Step 1: Load KG Files ----
     graphs = []
     for file_path in ["Data/KGs/202201.json"]:
         with open(file_path, "r") as f:
@@ -20,63 +20,86 @@ try:
             kg = nx.node_link_graph(kg_data)
             graphs.append((file_path, kg))
 
-    # Step 2: Set query-specific parameters
-    # For query: "WHAT is the same for FOOD on 2022 Jan 01"
-    # Target is SBU nodes for FOOD, for 2022-01-01, i.e., 20220101-FOOD-Total-Total
-    # Node type: 'sbu'
-    target_date = "20220101"
-    sbu_value = "FOOD"
-    target_sbu_node_id = f"{target_date}-{sbu_value}-Total-Total"
-    target_node_types = ["sbu"]
+    # ---- Step 2: Initialization ----
+    # We aggregate sales (total_gmv_amt) for FOOD SBU in Florida for 202201
+    target_sbu = "FOOD"
+    target_month = "202201"
+    target_state = "FL"
+    target_node_types = ["sbu_store"]
 
-    analyzed_data = []
+    # Optional: Store additional context if needed
+    matched_nodes = []
 
-    # Step 3: Process each loaded graph
+    # ---- Step 3: Main Graph Traversal and Filtering ----
     for file_path, kg in graphs:
-        # We look for sbu node with node_id matching target_sbu_node_id
-        node_attrs = kg.nodes.get(target_sbu_node_id)
-        if node_attrs and node_attrs.get("node_type") == "sbu":
-            # Collect only the relevant sales/GVMA data
-            data_point = {
-                "node_id": target_sbu_node_id,
-                "node_type": "sbu",
-                "file_source": file_path,
-            }
+        for node_id, node_attrs in kg.nodes(data=True):
+            node_type = node_attrs.get("node_type", "").lower()
 
-            # Extract relevant SBU properties
-            # According to schema: daily_sbu_GMV_AMT, daily_sbu_GMV_AMT_pred, dept_count
-            data_point["daily_sbu_GMV_AMT"] = node_attrs.get("daily_sbu_GMV_AMT")
-            data_point["daily_sbu_GMV_AMT_pred"] = node_attrs.get("daily_sbu_GMV_AMT_pred")
-            data_point["dept_count"] = node_attrs.get("dept_count")
+            if node_type == "sbu_store":
+                # sbu_store IDs: YYYYMMDD-{SBU}-{STORE_ID}
+                # We'll need to check SBU and the date is in the target month
+                node_id_parts = node_id.split("-")
+                if len(node_id_parts) == 3:
+                    day_str, sbu_str, store_id = node_id_parts
 
-            # Optional: add _all_ other attributes if they exist
-            for k, v in node_attrs.items():
-                if k not in data_point:
-                    data_point[k] = v
+                    if sbu_str.upper() == target_sbu:
+                        # Check if this node is in the target month
+                        if day_str.startswith(target_month):
+                            # Check state (st_cd) property
+                            st_cd = node_attrs.get("st_cd", None)
+                            if (
+                                st_cd is not None
+                                and str(st_cd).strip().lower() == target_state.lower()
+                            ):
+                                # Extract relevant sales info
+                                data_point = {
+                                    "node_id": node_id,
+                                    "date": day_str,
+                                    "sbu": sbu_str,
+                                    "store_id": store_id,
+                                    "state": st_cd,
+                                    "total_sales_unit": node_attrs.get("total_sales_unit"),
+                                    "total_gmv_amt": node_attrs.get("total_gmv_amt"),
+                                    "LAT_DGR": node_attrs.get("LAT_DGR"),
+                                    "LONG_DGR": node_attrs.get("LONG_DGR"),
+                                    "node_type": node_type,
+                                    "file_source": file_path,
+                                }
+                                matched_nodes.append(data_point)
 
-            analyzed_data.append(data_point)
+    # ---- Step 4: Aggregate Results ----
+    # Convert to DataFrame for easy aggregation
+    df = pd.DataFrame(matched_nodes)
 
-    # Step 4: Prepare results
-    results["data"] = analyzed_data
+    total_gmv = (
+        float(df["total_gmv_amt"].sum()) 
+        if not df.empty and "total_gmv_amt" in df.columns 
+        else 0.0
+    )
+    
+    total_sales_units = (
+        int(df["total_sales_unit"].sum()) 
+        if not df.empty and "total_sales_unit" in df.columns 
+        else 0
+    )
+
+    # Assign results to return
+    results["data"] = matched_nodes
     results["metadata"] = {
         "query_type": "temporal_analysis",
         "file_count": len(graphs),
-        "target_node_types": target_node_types,
-        "query_pattern": "sbu_analysis",
-        "queried_date": target_date,
-        "queried_sbu": sbu_value,
-    }
-    results["summary"] = {
-        "total_records": len(analyzed_data),
-        "matched_node_id": target_sbu_node_id,
+        "target_node_types": ["sbu_store"],
+        "query_pattern": "geographic_analysis",
+        "filtered_sbu": target_sbu,
+        "filtered_month": target_month,
+        "filtered_state": target_state,
     }
 
-    # Warning if no results were found
-    if len(analyzed_data) == 0:
-        results["warning"] = (
-            f"No SBU node found for SBU={sbu_value} on date={target_date} "
-            f"in {file_path}. Check data coverage or spelling."
-        )
+    results["summary"] = {
+        "total_records": len(matched_nodes),
+        "total_gmv_amt": total_gmv,
+        "total_sales_unit": total_sales_units,
+    }
 
 except Exception as e:
     results["error"] = str(e)

@@ -29,24 +29,18 @@ class CodeFormatter:
             "numpy as np",
             "datetime",
         }
-
     def format_and_validate(self, code: str) -> Tuple[str, bool, List[str]]:
         """
         Format and validate generated code using multiple strategies.
-
-        Args:
-            code: Raw generated code string
-
-        Returns:
-            Tuple of (formatted_code, is_valid, error_messages)
         """
         errors = []
 
         # Step 1: Basic cleanup and preprocessing
         cleaned_code = self._preprocess_code(code)
 
-        # Step 2: Fix common LLM generation issues
-        fixed_code = self._fix_common_llm_issues(cleaned_code)
+        # Step 2: TEMPORARILY SKIP the problematic LLM issue fixing
+        # fixed_code = self._fix_common_llm_issues(cleaned_code)
+        fixed_code = cleaned_code  # Skip this step for now
 
         # Step 3: Validate syntax
         is_valid, syntax_errors = self._validate_syntax(fixed_code)
@@ -70,7 +64,7 @@ class CodeFormatter:
             errors.extend(final_errors)
 
         return fixed_code, final_valid, errors
-
+    
     def _preprocess_code(self, code: str) -> str:
         """Clean and preprocess raw generated code."""
         # Remove markdown code blocks
@@ -108,7 +102,7 @@ class CodeFormatter:
 
         cleaned_lines = lines[start_idx:end_idx]
         return "\n".join(cleaned_lines)
-
+    
     def _fix_common_llm_issues(self, code: str) -> str:
         """Fix common issues in LLM-generated code."""
         lines = code.split("\n")
@@ -116,43 +110,58 @@ class CodeFormatter:
 
         in_try_block = False
         try_indent = 0
+        has_except_or_finally = False
 
         for i, line in enumerate(lines):
             stripped = line.strip()
             current_indent = len(line) - len(line.lstrip())
 
-            # Track try blocks
+            # Track try blocks more carefully
             if stripped.startswith("try:"):
                 in_try_block = True
                 try_indent = current_indent
+                has_except_or_finally = False
                 fixed_lines.append(line)
                 continue
 
-            # If we're in a try block and hit unindented import, close the try block
-            if (
-                in_try_block
-                and stripped.startswith("import ")
-                and current_indent <= try_indent
-            ):
-                # Add except block before the import
-                except_line = " " * (try_indent + 4) + "pass"
-                fixed_lines.append(" " * try_indent + "except Exception as e:")
-                fixed_lines.append(except_line)
-                in_try_block = False
+            # Track except/finally blocks
+            if stripped.startswith(("except", "finally")):
+                has_except_or_finally = True
+                if in_try_block and current_indent == try_indent:
+                    in_try_block = False
+                fixed_lines.append(line)
+                continue
+
+            # Only fix incomplete try blocks if we're at the end or unindenting significantly
+            if (in_try_block and not has_except_or_finally and 
+                (current_indent <= try_indent or i == len(lines) - 1) and
+                not stripped.startswith(("import ", "from ")) and
+                stripped != ""):
+                
+                # Check if this is actually the end of the try block content
+                # Look ahead to see if there's an except/finally coming
+                has_upcoming_except = False
+                for j in range(i, min(i + 3, len(lines))):
+                    future_line = lines[j].strip()
+                    if future_line.startswith(("except", "finally")):
+                        has_upcoming_except = True
+                        break
+                
+                # Only add except if there's no upcoming except/finally
+                if not has_upcoming_except and current_indent <= try_indent:
+                    fixed_lines.append(" " * try_indent + "except Exception as e:")
+                    fixed_lines.append(" " * (try_indent + 4) + "results['error'] = str(e)")
+                    in_try_block = False
+                    has_except_or_finally = True
 
             # Fix f-string issues (common in generated code)
             if 'f"' in line and "\\n" in line:
                 line = line.replace("\\n", "\n")
 
-            # Ensure proper indentation for results dictionary
-            if "results = {" in stripped:
-                fixed_lines.append(line)
-                continue
-
             # Fix common quote issues
             if "'" in stripped and '"' in stripped:
-                # Standardize on double quotes
-                line = re.sub(r"(?<!\\)'", '"', line)
+                # Standardize on double quotes, but be more careful
+                line = re.sub(r"(?<!\\)'([^']*)'", r'"\1"', line)
 
             fixed_lines.append(line)
 
@@ -161,7 +170,7 @@ class CodeFormatter:
             last_line = fixed_lines[-1].strip()
             if last_line == "results":
                 fixed_lines[-1] = "print(json.dumps(results))"
-            elif not last_line.startswith("print(json.dumps(results)"):
+            elif not any("print(json.dumps(results)" in line for line in fixed_lines):
                 fixed_lines.append("print(json.dumps(results))")
 
         return "\n".join(fixed_lines)
@@ -315,25 +324,25 @@ class CodeFormatter:
     def generate_fallback_code(self, query: str, target_files: List[str]) -> str:
         """Generate a simple fallback code template when all else fails."""
         return f"""
-import json
-import networkx as nx
-from datetime import datetime
+        import json
+        import networkx as nx
+        from datetime import datetime
 
-# Fallback code for query: {query}
-results = {{
-    'data': [],
-    'metadata': {{
-        'query': "{query}",
-        'target_files': {target_files},
-        'status': 'fallback_mode',
-        'timestamp': datetime.now().isoformat()
-    }},
-    'summary': {{
-        'total_records': 0,
-        'message': 'Fallback mode - original query code had syntax errors'
-    }},
-    'error': 'Code generation failed, using fallback template'
-}}
+        # Fallback code for query: {query}
+        results = {{
+            'data': [],
+            'metadata': {{
+                'query': "{query}",
+                'target_files': {target_files},
+                'status': 'fallback_mode',
+                'timestamp': datetime.now().isoformat()
+            }},
+            'summary': {{
+                'total_records': 0,
+                'message': 'Fallback mode - original query code had syntax errors'
+            }},
+            'error': 'Code generation failed, using fallback template'
+        }}
 
-print(json.dumps(results))
-"""
+        print(json.dumps(results))
+        """

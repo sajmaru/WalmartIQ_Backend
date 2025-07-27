@@ -41,6 +41,7 @@ class KGCodeGenerator:
             except Exception as e:
                 logger.warning(f"LLM code generation failed, using template: {e}")
         
+        print("LLM not available or failed, using template-based generation.")
         # Fallback to template-based generation
         return self._generate_with_template(analysis, target_files)
     
@@ -160,67 +161,67 @@ class KGCodeGenerator:
         
         # Basic template that works for most queries
         template = f"""
-import json
-import networkx as nx
-import pandas as pd
-import numpy as np
-from datetime import datetime
+        import json
+        import networkx as nx
+        import pandas as pd
+        import numpy as np
+        from datetime import datetime
 
-# Results dictionary to return
-results = {{
-    'data': [],
-    'metadata': {{}},
-    'summary': {{}}
-}}
+        # Results dictionary to return
+        results = {{
+            'data': [],
+            'metadata': {{}},
+            'summary': {{}}
+        }}
 
-try:
-    # Load KG files
-    graphs = []
-    for file_path in {target_files}:
-        with open(file_path, 'r') as f:
-            kg_data = json.load(f)
-            kg = nx.node_link_graph(kg_data)
-            graphs.append((file_path, kg))
-    
-    # Initialize data collection
-    analyzed_data = []
-    
-    # Process each graph
-    for file_path, kg in graphs:
-        # Extract nodes by type based on analysis
-        target_node_types = {target_node_types}
-        
-        for node_id, node_attrs in kg.nodes(data=True):
-            node_type = node_attrs.get('node_type')
-            if node_type in target_node_types:
-                # Collect relevant data based on query
-                data_point = {{
-                    'node_id': node_id,
-                    'node_type': node_type,
-                    'file_source': file_path,
-                    **node_attrs
-                }}
-                analyzed_data.append(data_point)
-    
-    # Apply pattern-specific processing
-    {self._get_pattern_specific_code(query_pattern)}
-    
-    # Format results
-    results['data'] = analyzed_data
-    results['metadata'] = {{
-        'query_type': '{analysis.get('type', 'general')}', 
-        'file_count': len(graphs),
-        'target_node_types': {target_node_types},
-        'query_pattern': '{query_pattern}'
-    }}
-    results['summary'] = {{'total_records': len(analyzed_data)}}
-    
-except Exception as e:
-    results['error'] = str(e)
+        try:
+            # Load KG files
+            graphs = []
+            for file_path in {target_files}:
+                with open(file_path, 'r') as f:
+                    kg_data = json.load(f)
+                    kg = nx.node_link_graph(kg_data)
+                    graphs.append((file_path, kg))
+            
+            # Initialize data collection
+            analyzed_data = []
+            
+            # Process each graph
+            for file_path, kg in graphs:
+                # Extract nodes by type based on analysis
+                target_node_types = {target_node_types}
+                
+                for node_id, node_attrs in kg.nodes(data=True):
+                    node_type = node_attrs.get('node_type')
+                    if node_type in target_node_types:
+                        # Collect relevant data based on query
+                        data_point = {{
+                            'node_id': node_id,
+                            'node_type': node_type,
+                            'file_source': file_path,
+                            **node_attrs
+                        }}
+                        analyzed_data.append(data_point)
+            
+            # Apply pattern-specific processing
+            {self._get_pattern_specific_code(query_pattern)}
+            
+            # Format results
+            results['data'] = analyzed_data
+            results['metadata'] = {{
+                'query_type': '{analysis.get('type', 'general')}', 
+                'file_count': len(graphs),
+                'target_node_types': {target_node_types},
+                'query_pattern': '{query_pattern}'
+            }}
+            results['summary'] = {{'total_records': len(analyzed_data)}}
+            
+        except Exception as e:
+            results['error'] = str(e)
 
-# Print results as JSON for capture by executor
-print(json.dumps(results))
-"""
+        # Print results as JSON for capture by executor
+        print(json.dumps(results))
+        """
         return template.strip()
     
     def _get_pattern_specific_code(self, pattern: str) -> str:

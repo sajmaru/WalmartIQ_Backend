@@ -109,7 +109,7 @@ class SecureCodeExecutor:
                     'success': False,
                     'error': f'Docker execution error: {str(e)}'
                 }
-            
+                
     def _create_secure_script(self, code: str, working_directory: str = None) -> str:
         """Create a secure Python script wrapper for the generated code."""
         
@@ -119,7 +119,12 @@ class SecureCodeExecutor:
         # Clean up the user code - remove any leading/trailing whitespace and ensure proper indentation
         cleaned_code = '\n'.join(line for line in code.split('\n'))
         
-        secure_wrapper = f'''import sys
+        # Properly indent the user code for the try block
+        indented_code = '\n'.join('    ' + line if line.strip() else line for line in cleaned_code.split('\n'))
+        # indented_code = "print('Executing user code...')\n"
+        
+        secure_wrapper = f'''
+import sys
 import json
 import os
 import signal
@@ -144,9 +149,6 @@ def timeout_handler(signum, frame):
 signal.signal(signal.SIGALRM, timeout_handler)
 signal.alarm({self.execution_timeout})
 
-# IMPORT RESTRICTIONS DISABLED FOR NOW
-# We'll re-enable with a proper whitelist later
-
 try:
     # Change to appropriate working directory
     if os.path.exists('{kg_path}'):
@@ -154,8 +156,8 @@ try:
     elif os.path.exists('Data/KGs'):
         os.chdir('.')  # Stay in current directory
     
-    # Execute user code directly (no import restrictions)
-{cleaned_code}
+    # Execute user code with proper indentation
+    {indented_code}
 
 except Exception as e:
     error_result = {{
@@ -168,8 +170,10 @@ except Exception as e:
 
 finally:
     signal.alarm(0)  # Cancel the alarm
-'''
+        '''
         return secure_wrapper
+        
+
     #     def _create_secure_script(self, code: str, working_directory: str = None) -> str:
     #         """Create a secure Python script wrapper for the generated code."""
     #         
@@ -429,7 +433,7 @@ print(json.dumps(results))
                 'error': f'Execution failed: {str(e)}',
                 'execution_time': time.time() - start_time
             }
-    
+        
     async def _execute_in_subprocess(self, code: str, working_directory: str = None) -> Dict[str, Any]:
         """Execute code in a subprocess with restrictions."""
         
@@ -442,12 +446,27 @@ print(json.dumps(results))
             script_path = f.name
         
         try:
+            # Determine the correct working directory
+            exec_cwd = os.getcwd()  # Start with current directory
+            
+            if working_directory:
+                # If working_directory is "Data/KGs", we want to run from the directory that contains "Data"
+                if working_directory == "Data/KGs" or working_directory.endswith("/Data/KGs"):
+                    # Stay in current directory since it should contain the Data folder
+                    exec_cwd = os.getcwd()
+                elif os.path.exists(working_directory):
+                    exec_cwd = working_directory
+            
+            logger.info(f"Executing subprocess in directory: {exec_cwd}")
+            logger.info(f"Working directory parameter: {working_directory}")
+            logger.info(f"Data/KGs exists from exec_cwd: {os.path.exists(os.path.join(exec_cwd, 'Data/KGs'))}")
+            
             # Execute with timeout and capture output
             process = await asyncio.create_subprocess_exec(
                 sys.executable, script_path,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd=working_directory
+                cwd=exec_cwd
             )
             
             stdout, stderr = await asyncio.wait_for(
@@ -455,10 +474,9 @@ print(json.dumps(results))
                 timeout=self.execution_timeout
             )
             
-            # Parse results
+            # Parse results (same as before)
             if process.returncode == 0:
                 try:
-                    # Try to parse the last line as JSON (our results)
                     output_lines = stdout.decode().strip().split('\n')
                     for line in reversed(output_lines):
                         if line.strip():
@@ -473,7 +491,6 @@ print(json.dumps(results))
                             except json.JSONDecodeError:
                                 continue
                     
-                    # If no JSON found, return raw output
                     return {
                         'success': True,
                         'result': {'data': [], 'raw_output': stdout.decode()},
