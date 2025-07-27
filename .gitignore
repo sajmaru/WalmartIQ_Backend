@@ -3,3 +3,4 @@ venv/
 __pycache__/
 constants.py
 README.md
+Data/

@@ -35,7 +35,6 @@ class DynamicKGRequest(BaseModel):
     """Request model for dynamic KG query endpoint."""
     query: str
     kg_path: Optional[str] = "Data/KGs"  # Base path to KG files
-    date_range: Optional[List[str]] = None  # e.g., ["202201", "202202"]
     context: Optional[Dict[str, Any]] = None  # Additional context
 
 class DynamicKGResponse(BaseModel):
@@ -82,8 +81,9 @@ async def dynamic_kg_query(request: DynamicKGRequest):
     """
     Dynamic Knowledge Graph Query Endpoint
     
-    Takes a natural language query, generates code to fetch data from KG files,
-    executes it safely, and returns formatted data for frontend consumption.
+    Takes a natural language query, automatically extracts date ranges,
+    generates code to fetch data from KG files, executes it safely, 
+    and returns formatted data for frontend consumption.
     
     Args:
         request: DynamicKGRequest containing query and optional parameters
@@ -96,11 +96,11 @@ async def dynamic_kg_query(request: DynamicKGRequest):
     try:
         logger.info(f"Processing KG query: {request.query[:100]}...")
         
-        # Process the query using KG agent
+        # Process the query using KG agent (date range extracted automatically)
         result = await kg_agent.process_query(
             query=request.query,
             kg_path=request.kg_path,
-            date_range=request.date_range,
+            date_range=None,  # Always None - dates extracted from query
             context=request.context
         )
         
@@ -127,7 +127,7 @@ async def dynamic_kg_query(request: DynamicKGRequest):
             error=error_msg,
             execution_time=execution_time
         )
-
+    
 @app.get("/kg-files")
 async def list_kg_files(kg_path: str = "Data/KGs"):
     """List available KG files in the specified directory."""

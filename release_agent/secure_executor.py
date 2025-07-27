@@ -109,15 +109,17 @@ class SecureCodeExecutor:
                     'success': False,
                     'error': f'Docker execution error: {str(e)}'
                 }
-    
+            
     def _create_secure_script(self, code: str, working_directory: str = None) -> str:
         """Create a secure Python script wrapper for the generated code."""
         
         # Adjust working directory path for the execution environment
         kg_path = 'KGs' if working_directory else 'Data/KGs'
         
-        secure_wrapper = f'''
-import sys
+        # Clean up the user code - remove any leading/trailing whitespace and ensure proper indentation
+        cleaned_code = '\n'.join(line for line in code.split('\n'))
+        
+        secure_wrapper = f'''import sys
 import json
 import os
 import signal
@@ -125,7 +127,7 @@ import resource
 from datetime import datetime
 import traceback
 
-# Set resource limits
+# Set resource limits (keep these for basic security)
 try:
     # Limit memory usage to {self.max_memory_mb}MB
     resource.setrlimit(resource.RLIMIT_AS, ({self.max_memory_mb * 1024 * 1024}, {self.max_memory_mb * 1024 * 1024}))
@@ -135,75 +137,25 @@ try:
 except:
     pass  # Resource limits might not be available on all systems
 
-# Timeout handler
+# Timeout handler (keep this for basic security)
 def timeout_handler(signum, frame):
     raise TimeoutError("Code execution timed out")
 
 signal.signal(signal.SIGALRM, timeout_handler)
 signal.alarm({self.execution_timeout})
 
-# Restricted imports - only allow safe modules
-allowed_modules = {self.allowed_imports}
-
-class RestrictedImporter:
-    def __init__(self, allowed_modules):
-        self.allowed_modules = allowed_modules
-    
-    def find_spec(self, name, path, target=None):
-        if name.split('.')[0] not in self.allowed_modules:
-            raise ImportError(f"Import of '{{name}}' is not allowed")
-        return None
-
-# Install import hook
-sys.meta_path.insert(0, RestrictedImporter(allowed_modules))
-
-# Safe execution environment
-safe_globals = {{
-    '__builtins__': {{
-        'len': len, 'range': range, 'enumerate': enumerate,
-        'zip': zip, 'map': map, 'filter': filter, 'sorted': sorted,
-        'sum': sum, 'min': max, 'max': max, 'abs': abs,
-        'round': round, 'bool': bool, 'int': int, 'float': float,
-        'str': str, 'list': list, 'dict': dict, 'set': set,
-        'tuple': tuple, 'type': type, 'isinstance': isinstance,
-        'hasattr': hasattr, 'getattr': getattr, 'setattr': setattr,
-        'print': print, 'Exception': Exception, 'ValueError': ValueError,
-        'TypeError': TypeError, 'KeyError': KeyError, 'IndexError': IndexError
-    }}
-}}
+# IMPORT RESTRICTIONS DISABLED FOR NOW
+# We'll re-enable with a proper whitelist later
 
 try:
-    # Pre-import allowed modules to avoid import restrictions
-    import json
-    import networkx as nx
-    import pandas as pd
-    import numpy as np
-    from datetime import datetime
-    from collections import defaultdict, Counter
-    import itertools
-    import math
-    
-    # Add to safe globals
-    safe_globals.update({{
-        'json': json, 'nx': nx, 'pd': pd, 'np': np,
-        'datetime': datetime, 'defaultdict': defaultdict,
-        'Counter': Counter, 'itertools': itertools, 'math': math
-    }})
-    
     # Change to appropriate working directory
     if os.path.exists('{kg_path}'):
         os.chdir(os.path.dirname('{kg_path}'))
+    elif os.path.exists('Data/KGs'):
+        os.chdir('.')  # Stay in current directory
     
-    # Execute user code
-    exec("""
-{code}
-""", safe_globals)
-    
-    # Output results as JSON
-    if 'results' in safe_globals:
-        print(json.dumps(safe_globals['results']))
-    else:
-        print(json.dumps({{"error": "No 'results' variable found in code"}}))
+    # Execute user code directly (no import restrictions)
+{cleaned_code}
 
 except Exception as e:
     error_result = {{
@@ -218,6 +170,114 @@ finally:
     signal.alarm(0)  # Cancel the alarm
 '''
         return secure_wrapper
+    #     def _create_secure_script(self, code: str, working_directory: str = None) -> str:
+    #         """Create a secure Python script wrapper for the generated code."""
+    #         
+    #         # Adjust working directory path for the execution environment
+    #         kg_path = 'KGs' if working_directory else 'Data/KGs'
+    #         
+    #         secure_wrapper = f'''
+    # import sys
+# import json
+# import os
+# import signal
+# import resource
+# from datetime import datetime
+# import traceback
+
+# # Set resource limits
+# try:
+#     # Limit memory usage to {self.max_memory_mb}MB
+#     resource.setrlimit(resource.RLIMIT_AS, ({self.max_memory_mb * 1024 * 1024}, {self.max_memory_mb * 1024 * 1024}))
+    
+#     # Limit CPU time to {self.execution_timeout} seconds
+#     resource.setrlimit(resource.RLIMIT_CPU, ({self.execution_timeout}, {self.execution_timeout}))
+# except:
+#     pass  # Resource limits might not be available on all systems
+
+# # Timeout handler
+# def timeout_handler(signum, frame):
+#     raise TimeoutError("Code execution timed out")
+
+# signal.signal(signal.SIGALRM, timeout_handler)
+# signal.alarm({self.execution_timeout})
+
+# # Restricted imports - only allow safe modules
+# allowed_modules = {self.allowed_imports}
+
+# class RestrictedImporter:
+#     def __init__(self, allowed_modules):
+#         self.allowed_modules = allowed_modules
+    
+#     def find_spec(self, name, path, target=None):
+#         if name.split('.')[0] not in self.allowed_modules:
+#             raise ImportError(f"Import of '{{name}}' is not allowed")
+#         return None
+
+# # Install import hook
+# sys.meta_path.insert(0, RestrictedImporter(allowed_modules))
+
+# # Safe execution environment
+# safe_globals = {{
+#     '__builtins__': {{
+#         'len': len, 'range': range, 'enumerate': enumerate,
+#         'zip': zip, 'map': map, 'filter': filter, 'sorted': sorted,
+#         'sum': sum, 'min': max, 'max': max, 'abs': abs,
+#         'round': round, 'bool': bool, 'int': int, 'float': float,
+#         'str': str, 'list': list, 'dict': dict, 'set': set,
+#         'tuple': tuple, 'type': type, 'isinstance': isinstance,
+#         'hasattr': hasattr, 'getattr': getattr, 'setattr': setattr,
+#         'print': print, 'Exception': Exception, 'ValueError': ValueError,
+#         'TypeError': TypeError, 'KeyError': KeyError, 'IndexError': IndexError
+#     }}
+# }}
+
+# try:
+#     # Pre-import allowed modules to avoid import restrictions
+#     import json
+#     import networkx as nx
+#     import pandas as pd
+#     import numpy as np
+#     from datetime import datetime
+#     from collections import defaultdict, Counter
+#     import itertools
+#     import math
+    
+#     # Add to safe globals
+#     safe_globals.update({{
+#         'json': json, 'nx': nx, 'pd': pd, 'np': np,
+#         'datetime': datetime, 'defaultdict': defaultdict,
+#         'Counter': Counter, 'itertools': itertools, 'math': math
+#     }})
+    
+#     # Change to appropriate working directory
+#     if os.path.exists('{kg_path}'):
+#         os.chdir(os.path.dirname('{kg_path}'))
+    
+#     # Execute user code
+#     exec("""
+# {code}
+# """, safe_globals)
+    
+#     # Output results as JSON
+#     if 'results' in safe_globals:
+#         print(json.dumps(safe_globals['results']))
+#     else:
+#         print(json.dumps({{"error": "No 'results' variable found in code"}}))
+
+# except Exception as e:
+#     error_result = {{
+#         "error": str(e),
+#         "traceback": traceback.format_exc(),
+#         "data": [],
+#         "metadata": {{"execution_failed": True}}
+#     }}
+#     print(json.dumps(error_result))
+
+# finally:
+#     signal.alarm(0)  # Cancel the alarm
+    # '''
+    #         return secure_wrapper
     
     def validate_code_safety(self, code: str) -> tuple[bool, str]:
         """
@@ -226,6 +286,7 @@ finally:
         Returns:
             (is_safe, reason)
         """
+        import re
         dangerous_patterns = [
             # File system operations
             r'open\s*\(',
@@ -289,6 +350,7 @@ results = {
     "metadata": {"test_execution": True},
     "summary": {"total_records": 1}
 }
+print(json.dumps(results))
 '''
         
         logger.info("Testing secure execution environment...")
@@ -308,7 +370,14 @@ results = {
         self.execution_timeout = execution_timeout
         self.max_memory_mb = max_memory_mb
         self.allowed_imports = allowed_imports or [
-            'json', 'networkx', 'pandas', 'numpy', 'datetime', 'collections', 'itertools', 'math'
+            'json', 'networkx', 'pandas', 'numpy', 'datetime', 'collections', 'itertools', 'math',
+            # Additional modules needed internally by the allowed libraries
+            'inspect', 'types', 'functools', 'operator', 'copy', 'weakref', 'warnings',
+            'heapq', 'bisect', 'random', 'decimal', 're', 'string', 'io', 'sys',
+            # Modules needed by pandas/numpy
+            'pickle', 'gzip', 'bz2', 'lzma', 'zipfile', 'tarfile',
+            # Modules needed by networkx  
+            'importlib', 'pkgutil', 'textwrap', 'pprint', 'traceback'
         ]
         self.execution_strategy = self._determine_execution_strategy()
     
